@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
@@ -22,7 +23,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, true)
         super.onCreate(savedInstanceState)
         setContent {
-            val list1: List<Memo> = remember {
+            val list1: MutableList<Memo> = remember {
                 mutableListOf(
                     Memo("Memo1",  1),
                     Memo("Memo2", 2),
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
 )
 @Composable
 fun AppPreview() {
-    val list1: List<Memo> = remember {
+    val list1: MutableList<Memo> = remember {
         mutableListOf(
             Memo("Memo1",  1),
             Memo("Memo2", 2),

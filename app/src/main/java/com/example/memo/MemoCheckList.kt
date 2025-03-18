@@ -36,30 +36,39 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-
-//Log.d("CALLED FROM: ", "" )
-class MemoCheckListViewModel (list: MutableList<Memo>, name: String)
+//TODO: CONSIDER CASE IF GENERATORED UUID OF A MEMO IS NOT UNIQUE IN THE LIST
+// ^^^^ copied in Memo.kt
+class MemoCheckListViewModel (list: MutableList<Memo>, listName: String)
     : ViewModel() {
-    private var _name = mutableStateOf(name)
-    private var _data = list
-    var displayedItems = list.toMutableStateList()
+    //State remains private while discrete values are attainable
+    //through the public values
+    // _ for private
+    private var _name = mutableStateOf(listName)
+    private var _memos = list.toMutableStateList()
+    val memos: List<Memo>
+        get() = _memos
 
     fun addItem(text: String) {
         Log.d("CALLED FROM:" ,"addItem(text:String)")
         Log.d("VARIABLE TEXT", text)
-        displayedItems += Memo(text,  displayedItems.size + 1)
-        Log.d("VARIABLE DATA:",displayedItems.toString())
+        //Maintain Order
+        _memos.add(Memo(text, _memos.last().order + 1))
+        Log.d("VARIABLE DATA:",_memos.toString())
     }
 
     fun removeItem(index: Int) {
         Log.d("CALLED FROM:" ,"removeItem(index: Int)")
         Log.d("VARIABLE INDEX", index.toString())
-        displayedItems.removeAt(index)
-        Log.d("VARIABLE DATA:",displayedItems.toString())
+        _memos.removeAt(index)
+        Log.d("VARIABLE DATA:",_memos.toString())
+    }
+
+    fun removeItem(item: Memo){
+        _memos.remove(item)
     }
 
     fun updateCheckedItem(index: Int, checked: Boolean) {
-        displayedItems[index] = displayedItems[index].copy(checked = checked)
+        _memos[index].checked.value = checked
     }
 }
 
@@ -69,7 +78,7 @@ fun MemoScreen (
     viewModel: MemoCheckListViewModel,
     modifier: Modifier = Modifier
 ) {
-    val displayedItems = remember { viewModel.displayedItems }
+    val memos = viewModel.memos
     val editMode = remember {mutableStateOf(false)}
 
     Scaffold(modifier,
@@ -114,13 +123,13 @@ fun MemoScreen (
             modifier = Modifier.padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            MemosCheckListDisplay(displayedItems, viewModel::updateCheckedItem ,viewModel::removeItem)
+            MemoListDisplay(memos, viewModel::updateCheckedItem ,viewModel::removeItem)
         }
     }
 }
 
 @Composable
-fun MemosCheckListDisplay (
+fun MemoListDisplay (
     items: List<Memo>,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
@@ -133,9 +142,13 @@ fun MemosCheckListDisplay (
         .background(MaterialTheme.colorScheme.secondary)
     LazyColumn (
         modifier = lazyColumnModifier) {
-        itemsIndexed(items) {  index , item ->
+        itemsIndexed(
+            items,
+            key = { _, item -> item.idKey }
+        ) {  index , item ->
             MemoItemDisplay(
-                memo = item,
+                memoName = item.memoText,
+                memoChecked = item.checked.value,
                 index = index,
                 onCheckItem,
                 onRemoveItem,
@@ -148,7 +161,8 @@ fun MemosCheckListDisplay (
 
 @Composable
 fun MemoItemDisplay(
-    memo: Memo,
+    memoName: String,
+    memoChecked: Boolean,
     index: Int,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index : Int) -> Unit,
@@ -162,12 +176,12 @@ fun MemoItemDisplay(
     ) {
         Log.d("CALLED FROM: ", "MemoItemDisplay" )
         Text(
-            text = memo.memoText,
+            text = memoName,
             modifier = Modifier.weight(1f)
         )
         Checkbox(
-            checked = memo.checked,
-            onCheckedChange = {onCheckItem(index, !memo.checked)}
+            checked = memoChecked,
+            onCheckedChange = {onCheckItem(index, !memoChecked)}
         )
         Button(onClick = {onRemoveItem(index)},
         ) {
@@ -200,7 +214,7 @@ fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
 @Composable
 fun ListScreenPreview() {
     var list = mutableListOf(
-        Memo("Memo1",  1, true),
+        Memo("Memo1",  1, ),
         Memo("Memo2" ,  2),
         Memo("Memo3", 3),
         Memo("Memo4",  4)
@@ -214,6 +228,5 @@ fun ListScreenPreview() {
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun MemoPreview() {
-    val memo = Memo("hell",  0 )
-    MemoItemDisplay(memo, 0, { _: Int, _: Boolean -> }, {}, modifier = Modifier)
+    MemoItemDisplay("MagikMemo", true,0, { _: Int, _: Boolean -> }, {}, modifier = Modifier)
 }

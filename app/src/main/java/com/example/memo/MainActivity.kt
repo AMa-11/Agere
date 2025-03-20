@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
             }
             MemoTheme {
                 Box(Modifier.safeDrawingPadding()) {
-                    val viewModel = remember { MemoCheckListViewModel(list = list1, listName = "Hell") }
+                    val viewModel = remember { MemoListViewModel(list = list1, listName = "Hell") }
                     MemoScreen(viewModel)
                 }
             }
@@ -61,7 +61,7 @@ fun AppPreview() {
     }
     MemoTheme {
         Box(Modifier.safeDrawingPadding()) {
-            val viewModel = remember { MemoCheckListViewModel(list1, "hell") }
+            val viewModel = remember { MemoListViewModel(list = list1, listName = "Hell") }
             MemoScreen(viewModel)
         }
     }

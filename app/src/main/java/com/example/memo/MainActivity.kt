@@ -9,12 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
-import com.example.memo.ui.theme.MemoTheme
-
+import com.example.compose.AppTheme
 //import com.example.memo.ui.theme.MemoTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,7 +29,7 @@ class MainActivity : ComponentActivity() {
                     Memo("Memo4",  4)
                 )
             }
-            MemoTheme {
+            AppTheme {
                 Box(Modifier.safeDrawingPadding()) {
                     val viewModel = remember { MemoListViewModel(list = list1, listName = "Hell") }
                     MemoScreen(viewModel)
@@ -59,7 +57,7 @@ fun AppPreview() {
             Memo("Memo4",  4)
         )
     }
-    MemoTheme {
+    AppTheme {
         Box(Modifier.safeDrawingPadding()) {
             val viewModel = remember { MemoListViewModel(list = list1, listName = "Hell") }
             MemoScreen(viewModel)

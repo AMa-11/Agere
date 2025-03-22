@@ -40,21 +40,26 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-
+import kotlin.math.min
+import kotlin.math.max
 
 // TODO: REFACTOR MEMOSCREEN
 // TODO: REFACTOR ALL MODIFIER TO VARIABLES/VALUES. depends on performace vs memory
@@ -173,7 +178,7 @@ fun MemoListDisplay (
     val listState = rememberLazyListState()
     val onDragSwap = { composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int  ->
         // bounds check
-        if (targetIndex >= 0 && targetIndex < items.size-1 ) {
+        if (targetIndex >= 0 && targetIndex <= items.size-1 ) {
             composableScope.launch {
                 listAnimatable[targetIndex].animateTo(
                     targetLocation.toFloat(),
@@ -184,12 +189,12 @@ fun MemoListDisplay (
             composableScope.launch{}
         }
     }
-
     // create the lazy column
     val lazyColumnModifier = Modifier.padding(paddingValues)
         .fillMaxWidth()
         .fillMaxHeight()
         .clip(RoundedCornerShape(16.dp, 16.dp, 0.dp, 0.dp))
+        .clipToBounds()
     LazyColumn (
         state = listState,
         modifier = lazyColumnModifier
@@ -232,26 +237,26 @@ fun MemoItemDisplay(
     // LOG COMPOSITION/RECOMPOSITION
     Log.d("CALLED FROM: ", "MemoItemDisplay" )
 
-    //val offsetY = remember { Animatable(0f) }
-
     //Modifier Values
     val paddingVal = 16.dp
     val focus = remember { mutableStateOf(false) }
     val onChangeFocus = {focus.value = !focus.value}
-    val itemModifier = Modifier.padding(horizontal = paddingVal, vertical = paddingVal/4)
+    var height by remember { mutableStateOf(1f) }
+    var yPos by remember { mutableStateOf(2000f) }
+    val itemModifier = Modifier.padding(horizontal = paddingVal)
         .fillMaxWidth()
-        .graphicsLayer { translationY = offsetY.value }
+        .graphicsLayer { translationY = offsetY.value}//if(yPos>=0) offsetY.value else 0f }
         .clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 16.dp))
         .background(MaterialTheme.colorScheme.primaryContainer)
         .zIndex(zIndex = if(focus.value) 1f else 0f)
+        .onPlaced { coord ->
+            height = coord.size.height.toFloat()
+            yPos = coord.positionInParent().y
+        }
 
     Row (
         verticalAlignment = Alignment.CenterVertically,
-        modifier = itemModifier/*.onGloballyPositioned { coordinates ->
-            x.value = coordinates.positionInParent().x
-            y.value = coordinates.positionInParent().y
-            height.value = coordinates.size.height.toFloat()
-        }*/
+        modifier = itemModifier
     ) {
         Text(
             text = memoName,
@@ -271,10 +276,16 @@ fun MemoItemDisplay(
 
         if (editMode.value == true) {
             val animate = { cScope: CoroutineScope, target: Float  -> cScope.launch {
-                offsetY.animateTo(target, animationSpec = tween(60))
+
+                    offsetY.animateTo(target, animationSpec = tween(100))
+
             }}
+            val printy = { -> Log.d("yAtEnd:", yPos.toString())
+                Unit}
             ReorderIcon(
                 index,
+                height,
+                printy,
                 onSwapItems,
                 onDragSwap,
                 onResetAnimatable,
@@ -288,12 +299,15 @@ fun MemoItemDisplay(
 @Composable
 fun ReorderIcon(
     index: Int,
+    height: Float,
+    printy: () -> Unit,
     onSwapItems: (start: Int, end: Int) -> Unit,
     onDragSwap: (composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int) -> Job,
     onResetAnimatable: (start: Int, end: Int) -> Job,
     animate: (composableScope: CoroutineScope, target: Float) -> Job,
     onChangeFocus: () -> Unit
 ) {
+    Log.d("CALLED FROM:","ReorderIcon")
     val offsetLocalY = remember { mutableStateOf(0f) }
     val composableScope = rememberCoroutineScope()
     Image(
@@ -310,32 +324,39 @@ fun ReorderIcon(
                         onChangeFocus()
                     },
                     onDragEnd = {
-                        val size = 148
+                        printy()
+                        val size = height.toInt()
                         val remainder = offsetLocalY.value.toInt() / size
                         val targetIndexOffset =  if (offsetLocalY.value >= 0) {1} else {-1}
                         val targetIndex = index + remainder + targetIndexOffset
                         if (targetIndex != index) {onSwapItems(index, targetIndex)}
+                        // cleanup
                         onResetAnimatable(0,0)
+                        offsetLocalY.value = 0f
                         onChangeFocus()
                     },
                     onDrag = { change, dragAmount ->
                         offsetLocalY.value += dragAmount.y
+
                         animate(composableScope, offsetLocalY.value)
                         change.consume()
                         // Swapping Logic
-                        val size = 148
+                        val size = height.toInt()
                         val remainder = offsetLocalY.value.toInt() / size
                         val mod = (offsetLocalY.value % size)
-                        val targetIndexOffset =  if (offsetLocalY.value >= 0) {1} else {-1}
+                        val targetIndexOffset = if (offsetLocalY.value >= 0) { 1 } else { -1 }
                         val targetIndex = index + remainder + targetIndexOffset
                         val targetLocation = -mod
+                        //Log.d("Height:", height.toString())
                         Log.d("Drag Offset:", offsetLocalY.value.toString())
                         Log.d("Remainder:", remainder.toString())
                         Log.d("Mod:", mod.toString())
                         Log.d("TargetIndex:", targetIndex.toString())
+
                         if (targetIndex != index) {
                             onDragSwap(composableScope, targetIndex, targetLocation.toInt())
                         }
+
                     }
                 )
             }

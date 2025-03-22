@@ -26,7 +26,11 @@ class MainActivity : ComponentActivity() {
                     Memo("Memo1",  1),
                     Memo("Memo2", 2),
                     Memo("Memo3",  3),
-                    Memo("Memo4",  4)
+                    Memo("Memo4",  4),
+                    Memo("Memo5",  5),
+                    Memo("Memo6",  6),
+                    Memo("Memo7",  7),
+                    Memo("Memo8",  8)
                 )
             }
             AppTheme {
@@ -54,7 +58,11 @@ fun AppPreview() {
             Memo("Memo1",  1),
             Memo("Memo2", 2),
             Memo("Memo3",  3),
-            Memo("Memo4",  4)
+            Memo("Memo4",  4),
+            Memo("Memo5",  5),
+            Memo("Memo6",  6),
+            Memo("Memo7",  7),
+            Memo("Memo8",  8)
         )
     }
     AppTheme {

@@ -37,6 +37,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
@@ -64,24 +65,35 @@ fun MemoScreen (
     modifier: Modifier = Modifier
 ) {
     val memos = viewModel.memos
+    val listAnimatable = remember { MutableList(memos.size){Animatable(0f)} }
     val editMode = remember {mutableStateOf(true)}
     val toggleEditMode = {editMode.value = !editMode.value}
-
+    val addItemAnimatable = {text:String ->
+        (viewModel::addItem)(text)
+        listAnimatable.add(Animatable(0f))
+        Unit
+    }
+    val composableScope = rememberCoroutineScope()
+    val resetItemAnimatable = {start: Int, end: Int ->
+        composableScope.launch {
+            for (animatable in listAnimatable) {
+                animatable.snapTo(0f)
+            }
+        }
+    }
     Scaffold(modifier.background(MaterialTheme.colorScheme.surface),
         topBar = {
             TopBar(toggleEditMode)
         },
         bottomBar = {
-            BottomBar(viewModel::addItem)
+            BottomBar(addItemAnimatable)
         }) { paddingValues ->
-        Column(
-            modifier = Modifier.padding(paddingValues),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            MemoListDisplay(memos, editMode, viewModel::updateCheckedItem ,viewModel::removeItem)
-        }
+            MemoListDisplay(memos, listAnimatable, editMode, viewModel::updateCheckedItem ,viewModel::removeItem, viewModel::swapItemRange, resetItemAnimatable, paddingValues)
     }
 }
+
+
+
 @Composable
 fun TopBar(toggleEditMode: () -> Unit ) {
     Box (modifier = Modifier.fillMaxWidth()
@@ -146,21 +158,36 @@ fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
 @Composable
 fun MemoListDisplay (
     items: List<Memo>,
+    listAnimatable: MutableList<Animatable<Float, AnimationVector1D>>,
     editMode: MutableState<Boolean>,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
+    onSwapItems: (start: Int, end: Int) -> Unit,
+    resetItemAnimatable: (start: Int, end:Int) -> Job,
+    paddingValues: PaddingValues,
     modifier: Modifier = Modifier
 ) {
-    // remember the index that is being dragged and the offset
-    val dragged_index = remember { mutableStateOf(-1) }
-    val offsetY = remember { Animatable(0f) }
 
     // remember the list state for dragging logic
     // and to control scrolling
     val listState = rememberLazyListState()
+    val onDragSwap = { composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int  ->
+        // bounds check
+        if (targetIndex >= 0 && targetIndex < items.size-1 ) {
+            composableScope.launch {
+                listAnimatable[targetIndex].animateTo(
+                    targetLocation.toFloat(),
+                    animationSpec = tween(60)
+                )
+            }
+        } else {
+            composableScope.launch{}
+        }
+    }
 
     // create the lazy column
-    val lazyColumnModifier = Modifier.fillMaxWidth()
+    val lazyColumnModifier = Modifier.padding(paddingValues)
+        .fillMaxWidth()
         .fillMaxHeight()
         .clip(RoundedCornerShape(16.dp, 16.dp, 0.dp, 0.dp))
     LazyColumn (
@@ -169,19 +196,18 @@ fun MemoListDisplay (
     ) {
         itemsIndexed(
             items,
-            key = { _, item -> item.idKey }
         ) {  index , item ->
-            val updateDraggedIndex = {idx: Int -> dragged_index.value = idx}
             MemoItemDisplay(
                 memoName = item.memoText,
                 memoChecked = item.checked.value,
                 editMode = editMode,
                 index = index,
-                dragged_index.value,
-                updateDraggedIndex,
-                offsetY,
+                offsetY = listAnimatable[index],
                 onCheckItem,
                 onRemoveItem,
+                onSwapItems,
+                onDragSwap = onDragSwap,
+                onResetAnimatable =resetItemAnimatable,
                 modifier = Modifier)
         }
         Log.d("CALLED FROM (END OF)", "MemosCheckListDisplay" )
@@ -195,26 +221,29 @@ fun MemoItemDisplay(
     memoChecked: Boolean,
     editMode: MutableState<Boolean>,
     index: Int,
-    draggedIndex: Int,
-    updateDraggedIndex: (index: Int) -> Unit,
     offsetY: Animatable<Float, AnimationVector1D>,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index : Int) -> Unit,
+    onSwapItems: (start: Int, end: Int) -> Unit,
+    onDragSwap: (composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int) -> Job,
+    onResetAnimatable: (start: Int, end: Int) -> Job,
     modifier: Modifier
 ) {
     // LOG COMPOSITION/RECOMPOSITION
     Log.d("CALLED FROM: ", "MemoItemDisplay" )
 
-    val offsetY = remember { Animatable(0f) }
+    //val offsetY = remember { Animatable(0f) }
 
     //Modifier Values
     val paddingVal = 16.dp
+    val focus = remember { mutableStateOf(false) }
+    val onChangeFocus = {focus.value = !focus.value}
     val itemModifier = Modifier.padding(horizontal = paddingVal, vertical = paddingVal/4)
         .fillMaxWidth()
         .graphicsLayer { translationY = offsetY.value }
         .clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 16.dp))
         .background(MaterialTheme.colorScheme.primaryContainer)
-        //.zIndex(zIndex = zIndex)
+        .zIndex(zIndex = if(focus.value) 1f else 0f)
 
     Row (
         verticalAlignment = Alignment.CenterVertically,
@@ -239,19 +268,18 @@ fun MemoItemDisplay(
         ) {
             Text("remove")
         }
-        val composableScope = rememberCoroutineScope()
 
         if (editMode.value == true) {
-            val updateOffset = {offsetChange: Float -> }
             val animate = { cScope: CoroutineScope, target: Float  -> cScope.launch {
                 offsetY.animateTo(target, animationSpec = tween(60))
             }}
             ReorderIcon(
-                composableScope,
                 index,
-                { _ -> Unit},
-                updateOffset,
-                animate
+                onSwapItems,
+                onDragSwap,
+                onResetAnimatable,
+                animate,
+                onChangeFocus
             )
         }
     }
@@ -259,13 +287,15 @@ fun MemoItemDisplay(
 
 @Composable
 fun ReorderIcon(
-    composableScope: CoroutineScope,
     index: Int,
-    updateDraggedIndex: (index: Int) -> Unit,
-    updateOffset: (offsetChange: Float) -> Unit,
-    animate: (composableScope: CoroutineScope, target: Float) -> Job
+    onSwapItems: (start: Int, end: Int) -> Unit,
+    onDragSwap: (composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int) -> Job,
+    onResetAnimatable: (start: Int, end: Int) -> Job,
+    animate: (composableScope: CoroutineScope, target: Float) -> Job,
+    onChangeFocus: () -> Unit
 ) {
     val offsetLocalY = remember { mutableStateOf(0f) }
+    val composableScope = rememberCoroutineScope()
     Image(
         painterResource(id = R.drawable.reorder),
         contentDescription = "reorder icon",
@@ -277,19 +307,35 @@ fun ReorderIcon(
                 Log.d("Pointer Input Detected:", "InputDetected")
                 detectDragGestures(
                     onDragStart = { offset: Offset ->
-                        updateDraggedIndex(index)
+                        onChangeFocus()
                     },
                     onDragEnd = {
-                        offsetLocalY.value = 0f
-                        animate(composableScope, 0f)
-                        updateDraggedIndex(-1)
-                        updateOffset(0f)
+                        val size = 148
+                        val remainder = offsetLocalY.value.toInt() / size
+                        val targetIndexOffset =  if (offsetLocalY.value >= 0) {1} else {-1}
+                        val targetIndex = index + remainder + targetIndexOffset
+                        if (targetIndex != index) {onSwapItems(index, targetIndex)}
+                        onResetAnimatable(0,0)
+                        onChangeFocus()
                     },
                     onDrag = { change, dragAmount ->
                         offsetLocalY.value += dragAmount.y
-                        updateOffset(dragAmount.y)
                         animate(composableScope, offsetLocalY.value)
                         change.consume()
+                        // Swapping Logic
+                        val size = 148
+                        val remainder = offsetLocalY.value.toInt() / size
+                        val mod = (offsetLocalY.value % size)
+                        val targetIndexOffset =  if (offsetLocalY.value >= 0) {1} else {-1}
+                        val targetIndex = index + remainder + targetIndexOffset
+                        val targetLocation = -mod
+                        Log.d("Drag Offset:", offsetLocalY.value.toString())
+                        Log.d("Remainder:", remainder.toString())
+                        Log.d("Mod:", mod.toString())
+                        Log.d("TargetIndex:", targetIndex.toString())
+                        if (targetIndex != index) {
+                            onDragSwap(composableScope, targetIndex, targetLocation.toInt())
+                        }
                     }
                 )
             }
@@ -315,18 +361,17 @@ fun ListScreenPreview() {
 @Composable
 fun MemoPreview() {
     val editMode = remember { mutableStateOf(true) }
-    val draggedindex = 0
-    val updateDraggedIndex = {idx: Int -> Unit}
     val offsetY = remember { Animatable(0f) }
-    val listState = rememberLazyListState()
+    val cScope = rememberCoroutineScope()
     MemoItemDisplay(memoName="MagikMemo",
         memoChecked=true,
         editMode=editMode,
         index=0,
-        draggedIndex = draggedindex,
-        updateDraggedIndex = updateDraggedIndex,
         offsetY=offsetY,
         { _: Int, _: Boolean -> },
         {},
+        { _: Int, _: Int ->},
+        { c: CoroutineScope, _: Int, _: Int -> c.launch{} },
+        { _: Int, _: Int -> cScope.launch{} },
         modifier = Modifier)
 }

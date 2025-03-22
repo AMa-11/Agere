@@ -15,7 +15,7 @@ class MemoListViewModel (list: MutableList<Memo>, listName: String)
     private var _memos = list.toMutableStateList()
     val memos: List<Memo>
         get() = _memos
-
+    // return size of the list i.e new index of item
     fun addItem(text: String) {
         Log.d("CALLED FROM:" ,"addItem(text:String)")
         Log.d("VARIABLE TEXT", text)
@@ -33,6 +33,28 @@ class MemoListViewModel (list: MutableList<Memo>, listName: String)
 
     fun removeItem(item: Memo){
         _memos.remove(item)
+    }
+
+    fun swapItemRange(start: Int, end: Int) {
+        // bounds check
+        if (start < 0 || end < 0 || start >= _memos.size || end >= _memos.size ) {
+            return
+        }
+        val temp: Memo
+        if (start <= end) {
+            temp = _memos[start]
+            for (index in start..<end) {
+                _memos[index] = _memos[index+1]
+            }
+            _memos[end] = temp
+        } else {
+            // end < start
+            temp = _memos[start]
+            for (index in start downTo end+1) {
+                _memos[index] = _memos[index-1]
+            }
+            _memos[end] = temp
+        }
     }
 
     fun updateCheckedItem(index: Int, checked: Boolean) {

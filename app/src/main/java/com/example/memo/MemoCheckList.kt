@@ -2,7 +2,6 @@ package com.example.memo
 
 import android.annotation.SuppressLint
 import android.util.Log
-import androidx.compose.animation.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -29,48 +28,46 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.splineBasedDecay
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
-import androidx.compose.foundation.gestures.verticalDrag
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.currentComposer
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.unit.IntOffset
-import kotlinx.coroutines.coroutineScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 
 // TODO: REFACTOR MEMOSCREEN
+// TODO: REFACTOR ALL MODIFIER TO VARIABLES/VALUES. depends on performace vs memory
+// TODO: REMOVE ALL UNUSED PASSED MODIFIER PARAMS
 @Composable
 fun MemoScreen (
     viewModel: MemoListViewModel,
     modifier: Modifier = Modifier
 ) {
     val memos = viewModel.memos
-    val editMode = remember {mutableStateOf(false)}
+    val editMode = remember {mutableStateOf(true)}
     val toggleEditMode = {editMode.value = !editMode.value}
 
-    Scaffold(modifier,
+    Scaffold(modifier.background(MaterialTheme.colorScheme.surface),
         topBar = {
             TopBar(toggleEditMode)
         },
@@ -81,20 +78,20 @@ fun MemoScreen (
             modifier = Modifier.padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            MemoListDisplay(memos, viewModel::updateCheckedItem ,viewModel::removeItem)
+            MemoListDisplay(memos, editMode, viewModel::updateCheckedItem ,viewModel::removeItem)
         }
     }
 }
 @Composable
 fun TopBar(toggleEditMode: () -> Unit ) {
     Box (modifier = Modifier.fillMaxWidth()
-        .background(MaterialTheme.colorScheme.onBackground)
+        .background(MaterialTheme.colorScheme.surfaceContainer)
     ) {
         Text(
             text = "ListName",
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.displayMedium,
             textAlign = TextAlign.Center,
         )
         Button(onClick = {},
@@ -109,7 +106,7 @@ fun TopBar(toggleEditMode: () -> Unit ) {
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
             Image(
-                painter = painterResource(R.drawable.menu),
+                painter = painterResource(R.drawable.edit),
                 contentDescription = "EditButton"
             )
         }
@@ -118,13 +115,14 @@ fun TopBar(toggleEditMode: () -> Unit ) {
 
 @Composable
 fun BottomBar(onAddItem: (text: String) -> Unit) {
-    Surface(modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.secondary
+    Surface(modifier = Modifier
+        .fillMaxWidth()
+        .background(MaterialTheme.colorScheme.surfaceContainer)
     ) {
         ButtonAddItem(onAddItem)
     }
 }
-
+// TODO: Consider moving this to BottomBar
 @Composable
 fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
     var textInput by remember { mutableStateOf("Add") }
@@ -134,10 +132,11 @@ fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
 
     Row {
         TextField(
+            modifier = Modifier.padding(horizontal = 16.dp),
             value = textInput,
             onValueChange = { textInput = it },
         )
-
+        //TODO: CHANGE TO A PLUS
         Button(enabled = true, onClick = {onAddItem(textInput)} ) {
             Text("Add Item")
         }
@@ -147,32 +146,39 @@ fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
 @Composable
 fun MemoListDisplay (
     items: List<Memo>,
+    editMode: MutableState<Boolean>,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // remember the index that is being dragged and the offset
     val dragged_index = remember { mutableStateOf(-1) }
     val offsetY = remember { Animatable(0f) }
 
-    val memoListState = LazyListState()
+    // remember the list state for dragging logic
+    // and to control scrolling
+    val listState = rememberLazyListState()
 
+    // create the lazy column
     val lazyColumnModifier = Modifier.fillMaxWidth()
         .fillMaxHeight()
-        .background(MaterialTheme.colorScheme.onBackground)
         .clip(RoundedCornerShape(16.dp, 16.dp, 0.dp, 0.dp))
-        .background(MaterialTheme.colorScheme.secondary)
     LazyColumn (
-        modifier = lazyColumnModifier) {
+        state = listState,
+        modifier = lazyColumnModifier
+    ) {
         itemsIndexed(
             items,
             key = { _, item -> item.idKey }
         ) {  index , item ->
-
+            val updateDraggedIndex = {idx: Int -> dragged_index.value = idx}
             MemoItemDisplay(
                 memoName = item.memoText,
                 memoChecked = item.checked.value,
+                editMode = editMode,
                 index = index,
-                dragged_index,
+                dragged_index.value,
+                updateDraggedIndex,
                 offsetY,
                 onCheckItem,
                 onRemoveItem,
@@ -187,35 +193,42 @@ fun MemoListDisplay (
 fun MemoItemDisplay(
     memoName: String,
     memoChecked: Boolean,
+    editMode: MutableState<Boolean>,
     index: Int,
-    draggedIndex: MutableState<Int>,
+    draggedIndex: Int,
+    updateDraggedIndex: (index: Int) -> Unit,
     offsetY: Animatable<Float, AnimationVector1D>,
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index : Int) -> Unit,
     modifier: Modifier
 ) {
+    // LOG COMPOSITION/RECOMPOSITION
+    Log.d("CALLED FROM: ", "MemoItemDisplay" )
+
+    val offsetY = remember { Animatable(0f) }
+
+    //Modifier Values
     val paddingVal = 16.dp
-    var offset: Float
-    if(index == draggedIndex.value) {
-        offset = offsetY.value
-    } else { offset = 0f
-    }
     val itemModifier = Modifier.padding(horizontal = paddingVal, vertical = paddingVal/4)
         .fillMaxWidth()
-        .graphicsLayer { translationY = offset }
+        .graphicsLayer { translationY = offsetY.value }
+        .clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 16.dp))
+        .background(MaterialTheme.colorScheme.primaryContainer)
+        //.zIndex(zIndex = zIndex)
 
-    Log.d("index:", index.toString())
-    Log.d("Draged index received:", draggedIndex.toString())
-
-    val offsetFloat = remember { mutableStateOf(0f) }
     Row (
         verticalAlignment = Alignment.CenterVertically,
-        modifier = itemModifier
+        modifier = itemModifier/*.onGloballyPositioned { coordinates ->
+            x.value = coordinates.positionInParent().x
+            y.value = coordinates.positionInParent().y
+            height.value = coordinates.size.height.toFloat()
+        }*/
     ) {
-        Log.d("CALLED FROM: ", "MemoItemDisplay" )
         Text(
             text = memoName,
-            modifier = Modifier.weight(1f)
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
         )
         Checkbox(
             checked = memoChecked,
@@ -227,124 +240,67 @@ fun MemoItemDisplay(
             Text("remove")
         }
         val composableScope = rememberCoroutineScope()
-        Image (
-            painterResource(id = R.drawable.reorder),
-            contentDescription = "reorder icon",
-            modifier = Modifier.pointerInput(Unit) {
+
+        if (editMode.value == true) {
+            val updateOffset = {offsetChange: Float -> }
+            val animate = { cScope: CoroutineScope, target: Float  -> cScope.launch {
+                offsetY.animateTo(target, animationSpec = tween(60))
+            }}
+            ReorderIcon(
+                composableScope,
+                index,
+                { _ -> Unit},
+                updateOffset,
+                animate
+            )
+        }
+    }
+}
+
+@Composable
+fun ReorderIcon(
+    composableScope: CoroutineScope,
+    index: Int,
+    updateDraggedIndex: (index: Int) -> Unit,
+    updateOffset: (offsetChange: Float) -> Unit,
+    animate: (composableScope: CoroutineScope, target: Float) -> Job
+) {
+    val offsetLocalY = remember { mutableStateOf(0f) }
+    Image(
+        painterResource(id = R.drawable.reorder),
+        contentDescription = "reorder icon",
+        modifier = Modifier
+            .padding(end = 12.dp)
+            .clip(shape= CircleShape)
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
+            .pointerInput(Unit) {
                 Log.d("Pointer Input Detected:", "InputDetected")
                 detectDragGestures(
                     onDragStart = { offset: Offset ->
-
-                        draggedIndex.value = index
-                        offsetFloat.value += offset.y
-                        composableScope.launch {
-                            offsetY.animateTo(offsetFloat.value, tween(60))
-                        }
-                        Log.d("START DRAG Offset: ", offsetY.value.toString())
-                        Log.d("START DRAG Dragged Index: ", draggedIndex.value.toString())
-
-
+                        updateDraggedIndex(index)
                     },
                     onDragEnd = {
-                        composableScope.launch {
-                            offsetY.animateTo(0f, animationSpec = tween(60))
-                        }
-                        draggedIndex.value = -1
-                        offsetFloat.value = 0f
-                        Log.d("END DRAG Offset: ", offsetY.value.toString())
-                        Log.d("END DRAG Dragged Index: ", draggedIndex.value.toString())
+                        offsetLocalY.value = 0f
+                        animate(composableScope, 0f)
+                        updateDraggedIndex(-1)
+                        updateOffset(0f)
                     },
-                    onDrag = {change, dragAmount ->
-                        offsetFloat.value += dragAmount.y
-                        composableScope.launch {
-                            offsetY.animateTo(offsetFloat.value, tween(60))
-                        }
-                        Log.d("DRAG Offset: ", offsetY.value.toString())
-                        Log.d("DRAG Dragged Index: ", draggedIndex.value.toString())
+                    onDrag = { change, dragAmount ->
+                        offsetLocalY.value += dragAmount.y
+                        updateOffset(dragAmount.y)
+                        animate(composableScope, offsetLocalY.value)
                         change.consume()
                     }
                 )
             }
-                /*
-            .transformable(
-                state = rememberTransformableState {
-                    _: Float, panChange: Offset, _: Float ->
-                    if (index == draggedIndex.value) {
-                        offsetY.value += panChange.y
-                        Log.d("Offset: ", offsetY.value.toString())
-                        draggedIndex.value = index
-                        Log.d("Dragged Index: ", draggedIndex.value.toString())
-                    }
-                }*/
-        )
-
-    }
+    )
 }
-
-// FROM https://developer.android.com/codelabs/jetpack-compose-animation#7
-/*
-private fun Modifier.drag(
-    onDismissed: () -> Unit,
-    draggedIndex: MutableState<Int>,
-    offsetY: MutableState<Float>
-): Modifier = composed {
-
-    pointerInput(Unit) {
-        // Used to calculate a settling position of a fling animation.
-        val decay = splineBasedDecay<Float>(this)
-        // Wrap in a coroutine scope to use suspend functions for touch events and animation.
-        coroutineScope {
-            while (true) {
-                // Wait for a touch down event.
-                val pointerId = awaitPointerEventScope { awaitFirstDown().id }
-                // Interrupt any ongoing animation.
-
-                // Wait for drag events.
-                awaitPointerEventScope {
-                    verticalDrag(pointerId) { change ->
-                        // Record the position after offset
-                        val verticalDragOffset = offsetY.value + change.positionChange().y
-                        launch {
-                            // Overwrite the Animatable value while the element is dragged.
-                            offsetY.snapTo(verticalDragOffset)
-                        }
-
-                        // Consume the gesture event, not passed to external
-                        change.consumePositionChange()
-                    }
-                }
-
-                // The animation should end as soon as it reaches these bounds.
-                offsetY.updateBounds(
-                    lowerBound = -size.width.toFloat(),
-                    upperBound = size.width.toFloat()
-                )
-                launch {
-                    if (targetOffsetX.absoluteValue <= size.width) {
-                        // Not enough velocity; Slide back to the default position.
-                        offsetY.animateTo(targetValue = 0f, initialVelocity = velocity)
-                    } else {
-                        // Enough velocity to slide away the element to the edge.
-                        offsetY.animateDecay(velocity, decay)
-                        // The element was swiped away.
-                        onDismissed()
-                    }
-                }
-            }
-        }
-    }
-        // Apply the horizontal offset to the element.
-        .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-}
-*/
-
-
 
 @Preview
 @Composable
 fun ListScreenPreview() {
     var list = mutableListOf(
-        Memo("Memo1",  1, ),
+        Memo("Memo1", 1),
         Memo("Memo2" ,  2),
         Memo("Memo3", 3),
         Memo("Memo4",  4)
@@ -358,7 +314,19 @@ fun ListScreenPreview() {
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun MemoPreview() {
-    val dragged_index = remember { mutableStateOf(0) }
+    val editMode = remember { mutableStateOf(true) }
+    val draggedindex = 0
+    val updateDraggedIndex = {idx: Int -> Unit}
     val offsetY = remember { Animatable(0f) }
-    MemoItemDisplay("MagikMemo", true,0, dragged_index, offsetY, { _: Int, _: Boolean -> }, {}, modifier = Modifier)
+    val listState = rememberLazyListState()
+    MemoItemDisplay(memoName="MagikMemo",
+        memoChecked=true,
+        editMode=editMode,
+        index=0,
+        draggedIndex = draggedindex,
+        updateDraggedIndex = updateDraggedIndex,
+        offsetY=offsetY,
+        { _: Int, _: Boolean -> },
+        {},
+        modifier = Modifier)
 }

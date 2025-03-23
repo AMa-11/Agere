@@ -1,6 +1,5 @@
 package com.example.memo
 
-import android.annotation.SuppressLint
 import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -51,15 +50,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 // TODO: REFACTOR MEMOSCREEN
-// TODO: REFACTOR ALL MODIFIER TO VARIABLES/VALUES. depends on performace vs memory
-// TODO: REMOVE ALL UNUSED PASSED MODIFIER PARAMS
+// TODO: REFACTOR ALL MODIFIER TO VARIABLES/VALUES. depends on performance vs memory
 @Composable
 fun MemoScreen (
     viewModel: MemoListViewModel,
     modifier: Modifier = Modifier
 ) {
     val memos = viewModel.memos
-    val listAnimatable = remember { MutableList(memos.size){Animatable(0f)} }
+    val listAnimatable = remember { MutableList(memos.size) {Animatable(0f)} }
     val editMode = remember {mutableStateOf(true)}
     val toggleEditMode = {editMode.value = !editMode.value}
     val addItemAnimatable = {text:String ->
@@ -85,8 +83,6 @@ fun MemoScreen (
             MemoListDisplay(memos, listAnimatable, editMode, viewModel::updateCheckedItem ,viewModel::removeItem, viewModel::swapItemRange, resetItemAnimatable, paddingValues)
     }
 }
-
-
 
 @Composable
 fun TopBar(toggleEditMode: () -> Unit ) {
@@ -150,23 +146,22 @@ fun MemoListDisplay (
     onSwapItems: (start: Int, end: Int) -> Unit,
     resetItemAnimatable: (start: Int, end:Int) -> Job,
     paddingValues: PaddingValues,
-    modifier: Modifier = Modifier
 ) {
 
     // remember the list state for dragging logic
     // and to control scrolling
     val listState = rememberLazyListState()
-    val onDragSwap = { composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int  ->
+    val coroutineScope = rememberCoroutineScope()
+    val onDragSwap = { targetIndex: Int, targetLocation: Int  ->
         // bounds check
         if (targetIndex >= 0 && targetIndex <= items.size-1 ) {
-            composableScope.launch {
-                listAnimatable[targetIndex].animateTo(
-                    targetLocation.toFloat(),
-                    animationSpec = tween(60)
+            coroutineScope.launch {
+                listAnimatable[targetIndex].snapTo(
+                    targetLocation.toFloat()
                 )
             }
         } else {
-            composableScope.launch{}
+            coroutineScope.launch{}
         }
     }
     // create the lazy column
@@ -192,8 +187,8 @@ fun MemoListDisplay (
                 onRemoveItem,
                 onSwapItems,
                 onDragSwap = onDragSwap,
-                onResetAnimatable =resetItemAnimatable,
-                modifier = Modifier)
+                onResetAnimatable =resetItemAnimatable
+            )
         }
         Log.d("CALLED FROM (END OF)", "MemosCheckListDisplay" )
     }
@@ -210,9 +205,8 @@ fun MemoItemDisplay(
     onCheckItem: (index: Int, checked: Boolean) -> Unit,
     onRemoveItem: (index : Int) -> Unit,
     onSwapItems: (start: Int, end: Int) -> Unit,
-    onDragSwap: (composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int) -> Job,
+    onDragSwap: (targetIndex: Int, targetLocation: Int) -> Job,
     onResetAnimatable: (start: Int, end: Int) -> Job,
-    modifier: Modifier
 ) {
     // LOG COMPOSITION/RECOMPOSITION
     Log.d("CALLED FROM: ", "MemoItemDisplay" )
@@ -256,9 +250,11 @@ fun MemoItemDisplay(
 
         if (editMode.value == true) {
             val animate = { cScope: CoroutineScope, target: Float  -> cScope.launch {
-
-                    offsetY.animateTo(target, animationSpec = tween(100))
-
+                //if (offsetY.value - target <= yPos) {
+                Log.d("OffsetANIMATE BEFORE:", offsetY.value.toString())
+                    offsetY.snapTo(target)
+                Log.d("OffsetANIMATE AFTER:", offsetY.value.toString())
+                //}
             }}
             val printy = { -> Log.d("yAtEnd:", yPos.toString())
                 Unit}
@@ -282,7 +278,7 @@ fun ReorderIcon(
     height: Float,
     printy: () -> Unit,
     onSwapItems: (start: Int, end: Int) -> Unit,
-    onDragSwap: (composableScope: CoroutineScope, targetIndex: Int, targetLocation: Int) -> Job,
+    onDragSwap: (targetIndex: Int, targetLocation: Int) -> Job,
     onResetAnimatable: (start: Int, end: Int) -> Job,
     animate: (composableScope: CoroutineScope, target: Float) -> Job,
     onChangeFocus: () -> Unit
@@ -316,8 +312,35 @@ fun ReorderIcon(
                         onChangeFocus()
                     },
                     onDrag = { change, dragAmount ->
+                        /* THIS LOG SHOULD BE ENOUGH FOR YOU TO FIGURE OUT THAT YOU NEED TO THINK INTERVALSD
+                         0.0
+2025-03-23 00:55:13.878  7159-7159  OffsetLOCAL AFTER:      com.example.memo                     D  -270.2859
+2025-03-23 00:55:13.878  7159-7159  OffsetLOCAL:            com.example.memo                     D  -270.2859
+2025-03-23 00:55:13.882  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  0.0
+2025-03-23 00:55:13.883  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -270.2859
+2025-03-23 00:55:13.886  7159-7159  CALLED FROM:            com.example.memo                     D  MemoItemDisplay
+2025-03-23 00:55:13.901  7159-7159  OffsetLOCAL BEFORE:     com.example.memo                     D  -270.2859
+2025-03-23 00:55:13.901  7159-7159  OffsetLOCAL AFTER:      com.example.memo                     D  -510.2566
+2025-03-23 00:55:13.901  7159-7159  OffsetLOCAL:            com.example.memo                     D  -510.2566
+2025-03-23 00:55:13.903  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  -270.2859
+2025-03-23 00:55:13.903  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -510.2566
+2025-03-23 00:55:13.904  7159-7174  EGL_emulation           com.example.memo                     D  app_time_stats: avg=18713.92ms min=1.24ms max=74672.03ms count=4
+2025-03-23 00:55:13.924  7159-7159  OffsetLOCAL BEFORE:     com.example.memo                     D  -510.2566
+2025-03-23 00:55:13.924  7159-7159  OffsetLOCAL AFTER:      com.example.memo                     D  -801.6316
+2025-03-23 00:55:13.925  7159-7159  OffsetLOCAL:            com.example.memo                     D  -801.6316
+2025-03-23 00:55:13.928  7159-7159  OffsetLOCAL BEFORE:     com.example.memo                     D  -801.6316
+2025-03-23 00:55:13.929  7159-7159  OffsetLOCAL AFTER:      com.example.memo                     D  -837.2097
+2025-03-23 00:55:13.929  7159-7159  OffsetLOCAL:            com.example.memo                     D  -837.2097
+2025-03-23 00:55:13.933  7159-7159  yAtEnd:                 com.example.memo                     D  371.7434
+2025-03-23 00:55:13.936  7159-7159  CALLED FROM (END OF)    com.example.memo                     D  MemosCheckListDisplay
+2025-03-23 00:55:13.937  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  -510.2566
+2025-03-23 00:55:13.938  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -801.6316
+2025-03-23 00:55:13.939  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  -801.6316
+2025-03-23 00:55:13.939  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -837.2097
+                         */
+                        Log.d("OffsetLOCAL BEFORE:", offsetLocalY.value.toString())
                         offsetLocalY.value += dragAmount.y
-
+                        Log.d("OffsetLOCAL AFTER:", offsetLocalY.value.toString())
                         animate(composableScope, offsetLocalY.value)
                         change.consume()
                         // Swapping Logic
@@ -327,26 +350,27 @@ fun ReorderIcon(
                         val targetIndexOffset = if (offsetLocalY.value >= 0) { 1 } else { -1 }
                         val targetIndex = index + remainder + targetIndexOffset
                         val targetLocation = -mod
+                        //Log.d("OffsetLOCAL:", offsetLocalY.value.toString())
                         //Log.d("Height:", height.toString())
-                        Log.d("Drag Offset:", offsetLocalY.value.toString())
-                        Log.d("Remainder:", remainder.toString())
-                        Log.d("Mod:", mod.toString())
-                        Log.d("TargetIndex:", targetIndex.toString())
+                        //Log.d("Drag Offset:", offsetLocalY.value.toString())
+                        //Log.d("Remainder:", remainder.toString())
+                        //Log.d("Mod:", mod.toString())
+                        //Log.d("TargetIndex:", targetIndex.toString())
 
                         if (targetIndex != index) {
-                            onDragSwap(composableScope, targetIndex, targetLocation.toInt())
+                            onDragSwap(targetIndex, targetLocation.toInt())
                         }
-
                     }
                 )
             }
     )
 }
 
+
 @Preview
 @Composable
 fun ListScreenPreview() {
-    var list = mutableListOf(
+    val list = mutableListOf(
         Memo("Memo1", 1),
         Memo("Memo2" ,  2),
         Memo("Memo3", 3),
@@ -358,7 +382,6 @@ fun ListScreenPreview() {
 
 
 @Preview(showBackground = true)
-@SuppressLint("UnrememberedMutableState")
 @Composable
 fun MemoPreview() {
     val editMode = remember { mutableStateOf(true) }
@@ -372,7 +395,7 @@ fun MemoPreview() {
         { _: Int, _: Boolean -> },
         {},
         { _: Int, _: Int ->},
-        { c: CoroutineScope, _: Int, _: Int -> c.launch{} },
         { _: Int, _: Int -> cScope.launch{} },
-        modifier = Modifier)
+        { _: Int, _: Int -> cScope.launch{} },
+        )
 }

@@ -2,64 +2,53 @@ package com.example.memo
 
 import android.annotation.SuppressLint
 import android.util.Log
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Scaffold
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.currentComposer
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlin.math.min
-import kotlin.math.max
 
 // TODO: REFACTOR MEMOSCREEN
 // TODO: REFACTOR ALL MODIFIER TO VARIABLES/VALUES. depends on performace vs memory
@@ -136,26 +125,17 @@ fun BottomBar(onAddItem: (text: String) -> Unit) {
         .fillMaxWidth()
         .background(MaterialTheme.colorScheme.surfaceContainer)
     ) {
-        ButtonAddItem(onAddItem)
-    }
-}
-// TODO: Consider moving this to BottomBar
-@Composable
-fun ButtonAddItem (onAddItem: (text: String) -> Unit) {
-    var textInput by remember { mutableStateOf("Add") }
-
-    Log.d("CALLED FROM:", "ButtonAddItem")
-    Log.d("VARIABLE TEXT:", textInput)
-
-    Row {
-        TextField(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            value = textInput,
-            onValueChange = { textInput = it },
-        )
-        //TODO: CHANGE TO A PLUS
-        Button(enabled = true, onClick = {onAddItem(textInput)} ) {
-            Text("Add Item")
+        var textInput by remember { mutableStateOf("Add") }
+        Row {
+            TextField(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                value = textInput,
+                onValueChange = { textInput = it },
+            )
+            //TODO: CHANGE TO A PLUS ICON
+            Button(enabled = true, onClick = {onAddItem(textInput)} ) {
+                Text("Add Item")
+            }
         }
     }
 }

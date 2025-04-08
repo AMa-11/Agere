@@ -249,11 +249,12 @@ fun MemoItemDisplay(
         }
 
         if (editMode.value == true) {
-            val animate = { cScope: CoroutineScope, target: Float  -> cScope.launch {
+            val composableScope = rememberCoroutineScope()
+            val animate = { target: Float  -> composableScope.launch {
                 //if (offsetY.value - target <= yPos) {
-                Log.d("OffsetANIMATE BEFORE:", offsetY.value.toString())
+                //Log.d("OffsetANIMATE BEFORE:", offsetY.value.toString())
                     offsetY.snapTo(target)
-                Log.d("OffsetANIMATE AFTER:", offsetY.value.toString())
+                //Log.d("OffsetANIMATE AFTER:", offsetY.value.toString())
                 //}
             }}
             val printy = { -> Log.d("yAtEnd:", yPos.toString())
@@ -274,18 +275,46 @@ fun MemoItemDisplay(
 
 @Composable
 fun ReorderIcon(
-    index: Int,
+    myIndex: Int,
     height: Float,
     printy: () -> Unit,
     onSwapItems: (start: Int, end: Int) -> Unit,
     onDragSwap: (targetIndex: Int, targetLocation: Int) -> Job,
     onResetAnimatable: (start: Int, end: Int) -> Job,
-    animate: (composableScope: CoroutineScope, target: Float) -> Job,
+    animate: (target: Float) -> Job,
     onChangeFocus: () -> Unit
 ) {
     Log.d("CALLED FROM:","ReorderIcon")
+
     val offsetLocalY = remember { mutableStateOf(0f) }
+    var newOffset by remember { mutableStateOf(0f)}
+    var lastIndex by remember { mutableStateOf(myIndex) }
+
     val composableScope = rememberCoroutineScope()
+
+    // TODO: HANDLE CASE WHEN @myIndex is between start and end
+    fun processOverDrag(start: Int, end: Int) {
+        if (start <= end) {
+            // Ascending order [1,2]
+            for (i in start..<end) {
+                if (end-1 <= myIndex) {
+                    onDragSwap(i,0)
+                } else {
+                    onDragSwap(i,-height.toInt())
+                }
+            }
+        } else {
+            // Descending order [2,1]
+            for (i in start downTo end+1) {
+                if (myIndex <= end+1) {
+                    onDragSwap(i,0)
+                } else {
+                    onDragSwap(i,height.toInt())
+                }
+            }
+        }
+    }
+
     Image(
         painterResource(id = R.drawable.reorder),
         contentDescription = "reorder icon",
@@ -304,16 +333,64 @@ fun ReorderIcon(
                         val size = height.toInt()
                         val remainder = offsetLocalY.value.toInt() / size
                         val targetIndexOffset =  if (offsetLocalY.value >= 0) {1} else {-1}
-                        val targetIndex = index + remainder + targetIndexOffset
-                        if (targetIndex != index) {onSwapItems(index, targetIndex)}
+                        val targetIndex = myIndex + remainder + targetIndexOffset
+                        if (targetIndex != myIndex) {onSwapItems(myIndex, targetIndex)}
                         // cleanup
                         onResetAnimatable(0,0)
                         offsetLocalY.value = 0f
+                        newOffset = 0f
+                        lastIndex = targetIndex
                         onChangeFocus()
                     },
                     onDrag = { change, dragAmount ->
-                        /* THIS LOG SHOULD BE ENOUGH FOR YOU TO FIGURE OUT THAT YOU NEED TO THINK INTERVALSD
-                         0.0
+                        //Log.d("OffsetLOCAL BEFORE:", offsetLocalY.value.toString())
+                        //offsetLocalY.value += dragAmount.y
+                        offsetLocalY.value += dragAmount.y
+                        newOffset += dragAmount.y
+
+                        //Log.d("OffsetLOCAL AFTER:", offsetLocalY.value.toString())
+                        animate(newOffset)
+                        change.consume()
+
+                        // Swapping Logic
+                        // optimize
+                        val size = height.toInt()
+                        val remainder = offsetLocalY.value.toInt() / size
+                        // if drag offset is negative target the item before
+                        // if drag offset is positive target the item after
+                        val targetIndexOffset = if (offsetLocalY.value >= 0) { 1 } else { -1 }
+                        val targetIndex = myIndex + remainder + targetIndexOffset
+
+                        // TODO: FIX OVERLAP
+                        // both processOverDrag and later ~line 383 onDragSwap interfere
+                        // with each other
+                        if (lastIndex != myIndex && lastIndex != targetIndex) {
+                            processOverDrag(lastIndex, targetIndex)
+                        }
+
+                        val mod = (offsetLocalY.value % size)
+                        val targetLocation = -mod
+
+                        //Log.d("Drag Offset:", offsetLocalY.value.toString())
+                        //Log.d("Remainder:", remainder.toString())
+                        //Log.d("Mod:", mod.toString())
+                        if (lastIndex != targetIndex) {
+                            Log.d("LastIndex:", lastIndex.toString())
+                            Log.d("TargetIndex:", targetIndex.toString())
+                        }
+                        lastIndex = targetIndex
+
+                        if (targetIndex != myIndex) {
+                            onDragSwap(targetIndex, targetLocation.toInt())
+                        }
+                    }
+                )
+            }
+    )
+}
+
+/* THIS LOG SHOULD BE ENOUGH FOR YOU TO FIGURE OUT THAT YOU NEED TO THINK INTERVALSD
+ 0.0
 2025-03-23 00:55:13.878  7159-7159  OffsetLOCAL AFTER:      com.example.memo                     D  -270.2859
 2025-03-23 00:55:13.878  7159-7159  OffsetLOCAL:            com.example.memo                     D  -270.2859
 2025-03-23 00:55:13.882  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  0.0
@@ -337,35 +414,7 @@ fun ReorderIcon(
 2025-03-23 00:55:13.938  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -801.6316
 2025-03-23 00:55:13.939  7159-7159  OffsetANIMATE BEFORE:   com.example.memo                     D  -801.6316
 2025-03-23 00:55:13.939  7159-7159  OffsetANIMATE AFTER:    com.example.memo                     D  -837.2097
-                         */
-                        Log.d("OffsetLOCAL BEFORE:", offsetLocalY.value.toString())
-                        offsetLocalY.value += dragAmount.y
-                        Log.d("OffsetLOCAL AFTER:", offsetLocalY.value.toString())
-                        animate(composableScope, offsetLocalY.value)
-                        change.consume()
-                        // Swapping Logic
-                        val size = height.toInt()
-                        val remainder = offsetLocalY.value.toInt() / size
-                        val mod = (offsetLocalY.value % size)
-                        val targetIndexOffset = if (offsetLocalY.value >= 0) { 1 } else { -1 }
-                        val targetIndex = index + remainder + targetIndexOffset
-                        val targetLocation = -mod
-                        //Log.d("OffsetLOCAL:", offsetLocalY.value.toString())
-                        //Log.d("Height:", height.toString())
-                        //Log.d("Drag Offset:", offsetLocalY.value.toString())
-                        //Log.d("Remainder:", remainder.toString())
-                        //Log.d("Mod:", mod.toString())
-                        //Log.d("TargetIndex:", targetIndex.toString())
-
-                        if (targetIndex != index) {
-                            onDragSwap(targetIndex, targetLocation.toInt())
-                        }
-                    }
-                )
-            }
-    )
-}
-
+ */
 
 @Preview
 @Composable
